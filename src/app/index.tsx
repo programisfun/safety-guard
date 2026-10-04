@@ -1,12 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager'; // ✅ Imported correctly
+import * as TaskManager from 'expo-task-manager'; 
 import { createClient } from '@supabase/supabase-js';
-
-console.log("[DEBUG LOG] Initializing script. Checking env variables...");
-console.log("[DEBUG LOG] EXPO_PUBLIC_SUPABASE_URL exists:", !!process.env.EXPO_PUBLIC_SUPABASE_URL);
-console.log("[DEBUG LOG] EXPO_PUBLIC_SUPABASE_ANON_KEY exists:", !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -14,91 +10,108 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const TASK_NAME = 'background-location-task';
 
-// ✅ TaskManager is used instead of Location for registering the background system
+// Global reference array to hold logs we want to expose to the UI
+let globalLogs: string[] = [];
+let updateUiLogsCallback: ((logs: string[]) => void) | null = null;
+
+function addDebugLog(message: string) {
+  const timestamp = new Date().toLocaleTimeString();
+  const formattedLog = `[${timestamp}] ${message}`;
+  console.log(formattedLog);
+  globalLogs = [formattedLog, ...globalLogs].slice(0, 50); // Keep last 50 logs
+  if (updateUiLogsCallback) {
+    updateUiLogsCallback(globalLogs);
+  }
+}
+
+// ✅ TaskManager definition
 TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
-  console.log("[DEBUG LOG] ---- Background Task Triggered ----");
+  addDebugLog("⚠️ Background Task Triggered by OS!");
   
   if (error) {
-    console.error("[DEBUG LOG] Task Error Received from OS:", error);
+    addDebugLog(`❌ OS Task Error: ${JSON.stringify(error)}`);
     return;
   }
   
   if (!data) {
-    console.warn("[DEBUG LOG] Task woke up but data object is completely empty.");
+    addDebugLog("⚠️ Task woke up but data object is completely empty.");
     return;
   }
 
-  console.log("[DEBUG LOG] Complete raw event data payload:", JSON.stringify(data));
-  
   if (data && data.locations && data.locations.length > 0) {
     const points = data.locations;
-    console.log(`[DEBUG LOG] Received ${points.length} location coordinates in this batch.`);
-    
-    // Process the latest coordinate point in the array batch
     const latestLocation = points[points.length - 1];
     const { latitude, longitude, accuracy } = latestLocation.coords;
     
-    console.log(`[DEBUG LOG] Parsing Latest Point -> Lat: ${latitude}, Lon: ${longitude}, Accuracy: ${accuracy} meters`);
+    addDebugLog(`📍 Parsed Coordinates -> Lat: ${latitude}, Lon: ${longitude} (±${accuracy}m)`);
     
     try {
-      console.log("[DEBUG LOG] Attempting network database insert into Supabase...");
+      addDebugLog("📤 Attempting network database insert into Supabase...");
       
+      // Explicitly forcing an auth recovery check right before insert to handle background memory isolation
+      const { data: { session } } = await supabase.auth.getSession();
+      addDebugLog(`🔑 BG Session Status: ${session ? 'Authenticated' : 'No Active Session'}`);
+
       const { data: dbData, error: dbError } = await supabase
         .from('locations')
-        .insert([
-          {
-            latitude: latitude,
-            longitude: longitude,
-          }
-        ])
+        .insert([{ latitude, longitude }])
         .select();
 
       if (dbError) {
-        console.error("[DEBUG LOG] ❌ Supabase Database rejected write:", JSON.stringify(dbError));
+        addDebugLog(`❌ Supabase Database rejected write: ${JSON.stringify(dbError)}`);
       } else {
-        console.log("[DEBUG LOG] ✅ Supabase Database saved row successfully:", JSON.stringify(dbData));
+        addDebugLog(`✅ Saved row successfully! ID details: ${JSON.stringify(dbData)}`);
       }
     } catch (err: any) {
-      console.error("[DEBUG LOG] ❌ Critical System network failure inside task:", err.message || err);
+      addDebugLog(`❌ Critical System network failure inside task: ${err.message || err}`);
     }
   } else {
-    console.warn("[DEBUG LOG] Data layout is missing standard .locations array structural field.");
+    addDebugLog("⚠️ Data layout is missing standard .locations array.");
   }
 });
 
-// ✅ Renamed default component to match expected routing standards
 export default function IndexRouteScreen() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [trackingActive, setTrackingActive] = useState(false);
+  const [uiLogs, setUiLogs] = useState<string[]>([]);
+
+  // Connect the global background logging utility to this component's local state hook
+  useEffect(() => {
+    updateUiLogsCallback = (logs) => setUiLogs(logs);
+    setUiLogs(globalLogs);
+    return () => {
+      updateUiLogsCallback = null;
+    };
+  }, []);
 
   useEffect(() => {
     const setupAuth = async () => {
-      console.log("[DEBUG LOG] App Mounted. Checking existing session state...");
+      addDebugLog("🔄 App Mounted. Checking existing session state...");
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.error("[DEBUG LOG] Session fetch check encountered error:", sessionError.message);
+          addDebugLog(`❌ Session fetch error: ${sessionError.message}`);
         }
 
         if (session) {
-          console.log("[DEBUG LOG] Active session found for User UUID:", session.user.id);
+          addDebugLog(`✅ Active session found for User: ${session.user.id}`);
           setIsAuthenticated(true);
         } else {
-          console.log("[DEBUG LOG] No active session found. Triggering silent Anonymous login...");
+          addDebugLog("🔄 No active session. Triggering silent Anonymous login...");
           const { data, error } = await supabase.auth.signInAnonymously();
           if (error) {
-            console.error("[DEBUG LOG] ❌ Anonymous Authentication failure:", error.message);
+            addDebugLog(`❌ Anonymous Auth failure: ${error.message}`);
             throw error;
           }
           if (data?.session) {
-            console.log("[DEBUG LOG] ✅ Anonymous Sign-In complete. Generated User UUID:", data.session.user.id);
+            addDebugLog(`✅ Anonymous Sign-In complete. User UUID: ${data.session.user.id}`);
             setIsAuthenticated(true);
           }
         }
       } catch (err: any) {
-        console.error("[DEBUG LOG] Execution path failed inside Auth startup routine:", err.message);
+        addDebugLog(`❌ Execution path failed inside Auth routine: ${err.message}`);
         Alert.alert("Security Error", "Could not establish secure connection to database.");
       } finally {
         setAuthLoading(false);
@@ -108,58 +121,69 @@ export default function IndexRouteScreen() {
     setupAuth();
 
     Location.hasStartedLocationUpdatesAsync(TASK_NAME).then((active) => {
-      console.log(`[DEBUG LOG] OS Check: Is background task '${TASK_NAME}' currently running?`, active);
+      addDebugLog(`📋 OS Check: Is background task running? ${active}`);
       setTrackingActive(active);
     });
   }, []);
 
   const startTracking = async () => {
-    console.log("[DEBUG LOG] Start Tracking button pressed. Evaluation chain initialized.");
+    addDebugLog("🚀 Start Tracking button pressed. Evaluation chain initialized.");
     
     if (!isAuthenticated) {
-      console.error("[DEBUG LOG] Tracking blocked: Client is currently unauthenticated.");
+      addDebugLog("❌ Tracking blocked: Client is currently unauthenticated.");
       Alert.alert("Error", "Cannot track location without a secure server token.");
       return;
     }
 
+    addDebugLog("🔄 Step 1: Requesting Foreground Location Access...");
     const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-    console.log("[DEBUG LOG] Foreground status reply:", fgStatus);
+    addDebugLog(`📋 Foreground Permission status: ${fgStatus}`);
+    if (fgStatus !== 'granted') {
+      Alert.alert("Permission Denied", "Foreground location permission is required.");
+      return;
+    }
 
+    addDebugLog("🔄 Step 2: Requesting Background Location Access...");
     const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-    console.log("[DEBUG LOG] Background status reply:", bgStatus);
+    addDebugLog(`📋 Background Permission status: ${bgStatus}`);
+    if (bgStatus !== 'granted') {
+      Alert.alert("Permission Denied", "Background location permission is required. Set your system setting to 'Allow all the time'.");
+      return;
+    }
 
-    if (fgStatus === 'granted' && bgStatus === 'granted') {
-      try {
-        console.log(`[DEBUG LOG] Requesting OS to launch background task '${TASK_NAME}'...`);
-        await Location.startLocationUpdatesAsync(TASK_NAME, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 60000, 
-          distanceInterval: 10, 
-          showsForegroundNotification: true,
-        });
-        
-        setTrackingActive(true);
-        console.log(`[DEBUG LOG] 🚀 Background task '${TASK_NAME}' successfully registered.`);
-        Alert.alert("Success", "Safety tracking started in background.");
-      } catch (err: any) {
-        console.error("[DEBUG LOG] ❌ Task registration configuration aborted by system:", err.message);
-        Alert.alert("Error", err.message);
-      }
-    } else {
-      console.warn("[DEBUG LOG] Hardware tracking aborted due to missing permission grants.");
-      Alert.alert("Permission Denied", "Both Foreground and Background location permissions are required.");
+    try {
+      addDebugLog(`🔄 Step 3: Requesting OS to register background task '${TASK_NAME}'...`);
+      await Location.startLocationUpdatesAsync(TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 10000, // Reduced to 10 seconds for easier debug testing
+        distanceInterval: 2,  // Reduced to 2 meters for easier debug testing
+        showsForegroundNotification: true,
+        // Added required Android explicit background options to mitigate system termination crashes
+        foregroundService: {
+          notificationTitle: "Safety Guard Active",
+          notificationBody: "Monitoring your background path safety logs.",
+          notificationColor: "#FF3B30",
+        }
+      });
+      
+      setTrackingActive(true);
+      addDebugLog(`🚀 Background task '${TASK_NAME}' successfully registered.`);
+      Alert.alert("Success", "Safety tracking started in background.");
+    } catch (err: any) {
+      addDebugLog(`❌ Task registration aborted by system: ${err.message}`);
+      Alert.alert("Registration Error", err.message);
     }
   };
 
   const stopTracking = async () => {
-    console.log("[DEBUG LOG] Stop Tracking button pressed.");
+    addDebugLog("🛑 Stop Tracking button pressed.");
     try {
       await Location.stopLocationUpdatesAsync(TASK_NAME);
       setTrackingActive(false);
-      console.log("[DEBUG LOG] 🛑 Task removed. Location streaming stopped.");
+      addDebugLog("🛑 Task removed. Location streaming stopped.");
       Alert.alert("Stopped", "Location tracking disabled.");
     } catch (err: any) {
-      console.error("[DEBUG LOG] Error caught while trying to destroy running task framework:", err.message);
+      addDebugLog(`❌ Error caught while destroying running task framework: ${err.message}`);
     }
   };
 
@@ -186,6 +210,22 @@ export default function IndexRouteScreen() {
           <Button title="Stop Tracking" onPress={stopTracking} color="#555" />
         )}
       </View>
+
+      {/* 🛠️ IN-APP VISUAL DEBUG LOG CONSOLE */}
+      <View style={styles.debugConsole}>
+        <Text style={styles.debugTitle}>🔧 Live In-App Logs:</Text>
+        <ScrollView style={styles.debugScroll} nestedScrollEnabled={true}>
+          {uiLogs.length === 0 ? (
+            <Text style={styles.debugTextEmpty}>No activity logged yet.</Text>
+          ) : (
+            uiLogs.map((log, idx) => (
+              <Text key={idx} style={styles.debugText}>
+                {log}
+              </Text>
+            ))
+          )}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -193,7 +233,13 @@ export default function IndexRouteScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { justifyContent: 'center', alignItems: 'center' },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  content: { flex: 0.5, justifyContent: 'center', alignItems: 'center', padding: 20 },
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
+  // Debug window styling
+  debugConsole: { flex: 0.5, backgroundColor: '#1e1e1e', borderTopWidth: 2, borderTopColor: '#333', padding: 10 },
+  debugTitle: { color: '#00FF00', fontWeight: 'bold', fontSize: 14, marginBottom: 5, fontFamily: 'monospace' },
+  debugScroll: { flex: 1 },
+  debugText: { color: '#ffffff', fontSize: 11, fontFamily: 'monospace', marginBottom: 3 },
+  debugTextEmpty: { color: '#888', fontSize: 11, style: 'italic' }
 });
