@@ -1,98 +1,92 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { View, Text, Button, Alert, StyleSheet, SafeAreaView } from 'react-native';
+import * as Location from 'expo-location';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
+// 1. Define the background task (MUST be OUTSIDE the component)
+Location.defineTask('background-location-task', async ({ error, location }) => {
+  if (error) {
+    console.error("Task Error:", error);
+    return;
   }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
+  if (location) {
+    console.log("Background Location Received:", location);
+    
+    // 2. SEND DATA TO YOUR SERVER
+    try {
+      const response = await fetch('https://your-api.com/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          timestamp: location.timestamp,
+        }),
+      });
+      if (response.ok) {
+        console.log("Location synced successfully");
+      }
+    } catch (err) {
+      console.error("Fetch Error:", err);
+    }
   }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+});
+
+export default function SafetyScreen() {
+  const startTracking = async () => {
+    // Request permissions
+    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+
+    if (fgStatus === 'granted' && bgStatus === 'granted') {
+      try {
+        await Location.startLocationUpdatesAsync('background-location-task', {
+          accuracy: Location.Accuracy.High,
+          // 60000ms = 1 minute
+          timeInterval: 60000, 
+          // Only update if the user moves more than 10 meters
+          distanceInterval: 10,
+          // Required for Android to keep the service alive
+          showsForegroundNotification: true, 
+        });
+        Alert.alert("Success", "Safety tracking started every 1 minute.");
+      } catch (err) {
+        Alert.alert("Error", err.message);
+      }
+    } else {
+      Alert.alert("Permission Denied", "Background location is required for Safety.");
+    }
+  };
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Safety Guard</Text>
+        <Text style={styles.subtitle}>Background tracking is active</Text>
+        <Button title="Start Safety Tracking" onPress={startTracking} color="#FF3B30" />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
   },
-  safeArea: {
+  content: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    alignItems: 'center',
+    padding: 20,
   },
   title: {
-    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 30,
   },
 });
