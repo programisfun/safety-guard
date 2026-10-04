@@ -8,7 +8,15 @@
     "scheme": "safetyguard",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationWhenInUseUsageDescription": "This app requires access to your location to monitor safety routes while active.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app requires background location access to keep tracking your safety even when your phone is locked."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +26,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.username71.safetyguard"
+      "package": "com.username71.safetyguard",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -32,6 +47,13 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Safety Guard to access your location even when running in the background.",
+          "isAndroidBackgroundLocationEnabled": true
         }
       ]
     ],
