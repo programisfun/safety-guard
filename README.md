@@ -1,5 +1,7 @@
 # Welcome to your Expo app 👋
 
+> **Note (current commit):** background location tracking only works while the app is in the foreground. The background/closed-app execution is not confirmed working yet.
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started
