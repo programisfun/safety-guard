@@ -2,8 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TASK_NAME = 'background-location-task';
+const STORAGE_KEY = 'location_log';
+
+async function saveLocations(points: any[]) {
+  try {
+    const existingRaw = await AsyncStorage.getItem(STORAGE_KEY);
+    const existing: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+    const entries = points.map((p: any) => ({
+      timestamp: new Date(p.timestamp).toISOString(),
+      latitude: p.coords.latitude,
+      longitude: p.coords.longitude,
+      accuracy: p.coords.accuracy,
+    }));
+    const updated = [...entries, ...existing].slice(0, 200); // keep newest 200
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    console.log(`💾 Saved ${entries.length} location(s) to AsyncStorage.`);
+  } catch (err) {
+    console.log(`❌ Failed to save locations: ${err}`);
+  }
+}
 
 function addDebugLog(message: string) {
   const timestamp = new Date().toLocaleTimeString();
@@ -29,22 +49,9 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
     const points = data.locations;
     const latestLocation = points[points.length - 1];
     const { latitude, longitude, accuracy } = latestLocation.coords;
-    const location= points
+    const location = points;
     if (location) {
-      try {
-        // Send directly to your live dashboard
-        await fetch('https://webhook.site/015a1087-7b1c-423e-94c6-e6ecf831f421', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            timestamp: new Date().toISOString(),
-            locationTimestamp: new Date(latestLocation.timestamp).toISOString(),
-            coords: location,
-          }),
-        });
-      } catch (err) {
-        // Fail silently or handle error
-      }
+      await saveLocations(location);
     }
     addDebugLog(`📍 Parsed Coordinates -> Lat: ${latitude}, Lon: ${longitude} (±${accuracy}m)`);
   } else {
@@ -54,6 +61,25 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
 
 export default function IndexRouteScreen() {
   const [trackingActive, setTrackingActive] = useState(false);
+  const [savedEntries, setSavedEntries] = useState<any[]>([]);
+
+  const loadSavedEntries = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      setSavedEntries(raw ? JSON.parse(raw) : []);
+    } catch (err) {
+      console.log(`❌ Failed to read stored locations: ${err}`);
+    }
+  };
+
+  const clearSavedEntries = async () => {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    setSavedEntries([]);
+  };
+
+  useEffect(() => {
+    loadSavedEntries();
+  }, []);
 
   // Connect the global background logging utility to this component's local state hook
   useEffect(() => {
@@ -90,7 +116,7 @@ export default function IndexRouteScreen() {
       addDebugLog(`🔄 Step 3: Requesting OS to register background task '${TASK_NAME}'...`);
       await Location.startLocationUpdatesAsync(TASK_NAME, {
         accuracy: Location.Accuracy.High,
-        timeInterval: 1000, // Reduced to 10 seconds for easier debug testing
+        timeInterval: 1000, // Reduced to 1 seconds for easier debug testing
         distanceInterval: 2,  // Reduced to 2 meters for easier debug testing
         foregroundService: {
           notificationTitle: "Safety Guard Active!!!!!!!!!!!!!!!",
@@ -135,10 +161,23 @@ export default function IndexRouteScreen() {
         )}
       </View>
 
-      {/* 🛠️ IN-APP VISUAL DEBUG LOG CONSOLE */}
-      <View style={styles.debugConsole}>
-        <Text style={styles.debugTitle}>🔧 Live In-App Logs:</Text>
-        
+      <View style={styles.savedSection}>
+        <Text style={styles.savedTitle}>💾 Stored Locations ({savedEntries.length})</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
+          <Button title="Refresh" onPress={loadSavedEntries} />
+          <Button title="Clear" onPress={clearSavedEntries} color="#555" />
+        </View>
+        <ScrollView nestedScrollEnabled={true}>
+          {savedEntries.length === 0 ? (
+            <Text style={styles.debugTextEmpty}>Nothing saved yet.</Text>
+          ) : (
+            savedEntries.map((entry, idx) => (
+              <Text key={idx} style={styles.debugText}>
+                {entry.timestamp} — {entry.latitude.toFixed(5)}, {entry.longitude.toFixed(5)} (±{Math.round(entry.accuracy)}m)
+              </Text>
+            ))
+          )}
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
@@ -155,5 +194,7 @@ const styles = StyleSheet.create({
   debugTitle: { color: '#00FF00', fontWeight: 'bold', fontSize: 14, marginBottom: 5, fontFamily: 'monospace' },
   debugScroll: { flex: 1 },
   debugText: { color: '#ffffff', fontSize: 11, fontFamily: 'monospace', marginBottom: 3 },
-  debugTextEmpty: { color: '#888', fontSize: 11, fontStyle: 'italic' }
+  debugTextEmpty: { color: '#888', fontSize: 11, fontStyle: 'italic' },
+  savedSection: { flex: 0.5, backgroundColor: '#1e1e1e', borderTopWidth: 2, borderTopColor: '#333', padding: 10 },
+  savedTitle: { color: '#00FF00', fontWeight: 'bold', fontSize: 14, marginBottom: 5 }
 });
