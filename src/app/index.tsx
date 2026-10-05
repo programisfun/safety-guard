@@ -6,6 +6,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TASK_NAME = 'background-location-task';
 const STORAGE_KEY = 'location_log';
+const WEBHOOK_URL =
+  process.env.EXPO_PUBLIC_LOCATION_WEBHOOK_URL ||
+  'https://play.svix.com/in/t3OzvHK1hwouzXzFN82yK7aiImk/';
+const WEBHOOK_TIMEOUT_MS = 10000;
 
 async function saveLocations(points: any[]) {
   try {
@@ -22,6 +26,39 @@ async function saveLocations(points: any[]) {
     console.log(`💾 Saved ${entries.length} location(s) to AsyncStorage.`);
   } catch (err) {
     console.log(`❌ Failed to save locations: ${err}`);
+  }
+}
+
+async function postToWebhook(points: any[]) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+    const response = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sentAt: new Date().toISOString(),
+        locationTimestamp: new Date().toLocaleTimeString(),
+        locations: points.map((p: any) => ({
+          timestamp: new Date(p.timestamp).toISOString(),
+          latitude: p.coords.latitude,
+          longitude: p.coords.longitude,
+          accuracy: p.coords.accuracy,
+          altitude: p.coords.altitude,
+          speed: p.coords.speed,
+          heading: p.coords.heading,
+        })),
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      addDebugLog(`📡 Webhook delivered ${points.length} point(s) — HTTP ${response.status}.`);
+    } else {
+      addDebugLog(`📡 Webhook rejected — HTTP ${response.status}: ${await response.text()}`);
+    }
+  } catch (err: any) {
+    addDebugLog(`❌ Webhook delivery failed: ${err?.message || err}`);
   }
 }
 
@@ -51,7 +88,8 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
     const { latitude, longitude, accuracy } = latestLocation.coords;
     const location = points;
     if (location) {
-      await saveLocations(location);
+      // await saveLocations(location);
+      await postToWebhook(location);
     }
     addDebugLog(`📍 Parsed Coordinates -> Lat: ${latitude}, Lon: ${longitude} (±${accuracy}m)`);
   } else {
@@ -76,10 +114,6 @@ export default function IndexRouteScreen() {
     await AsyncStorage.removeItem(STORAGE_KEY);
     setSavedEntries([]);
   };
-
-  useEffect(() => {
-    loadSavedEntries();
-  }, []);
 
   useEffect(() => {
     addDebugLog("🔄 App Mounted.");
@@ -111,7 +145,7 @@ export default function IndexRouteScreen() {
     try {
       addDebugLog(`🔄 Step 3: Requesting OS to register background task '${TASK_NAME}'...`);
       await Location.startLocationUpdatesAsync(TASK_NAME, {
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 1000, // Reduced to 1 seconds for easier debug testing
         distanceInterval: 2,  // Reduced to 2 meters for easier debug testing
         foregroundService: {
