@@ -2,6 +2,12 @@
 
 > **Note (current commit):** background location tracking only works while the app is in the foreground. The background/closed-app execution is not confirmed working yet.
 
+> **Huawei / EMUI devices:** the background task stops firing once the app is backgrounded. Disable auto management so EMUI's process manager does not kill the app's foreground service:
+>
+> **Settings → Apps → App launch → Safety Guard →** turn **off** "Manage automatically" (auto management), and enable **Auto-launch**, **Secondary launch**, and **Run in background**.
+>
+> Path varies by device and EMUI version; on some builds it is under **Phone Manager → Launch settings**.
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started
