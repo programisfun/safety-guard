@@ -2,9 +2,9 @@
 
 > **Huawei / EMUI devices:**
 >
-> **Settings → Apps → App launch → Safety Guard →** turn **off** "Manage automatically" (auto management), and enable **Auto-launch**, **Secondary launch**, and **Run in background**.
+> **Settings → Battery → Launch manager → Safety Guard →** turn **off** "Manage automatically" (auto management), and enable **Auto-launch**, **Secondary launch**, and **Run in background**.
 >
-> Path varies by device and EMUI version; on some builds it is under **Phone Manager → Launch settings**.
+> Path varies by device and EMUI version; on some builds Launch manager sits under **Phone Manager** instead of **Battery**.
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
