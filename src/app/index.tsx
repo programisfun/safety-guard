@@ -81,10 +81,6 @@ export default function IndexRouteScreen() {
     loadSavedEntries();
   }, []);
 
-  // Connect the global background logging utility to this component's local state hook
-  useEffect(() => {
-  }, []);
-
   useEffect(() => {
     addDebugLog("🔄 App Mounted.");
     Location.hasStartedLocationUpdatesAsync(TASK_NAME).then((active) => {
