@@ -16,6 +16,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setIsLoading(false);
@@ -36,7 +40,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         session,
         isLoading,
         signOut: async () => {
-          await supabase.auth.signOut();
+          await supabase?.auth.signOut();
         },
       }}>
       {children}

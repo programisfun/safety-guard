@@ -4,11 +4,16 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
 import { useSession } from '@/context/auth';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAnonKey, supabaseConfigError, supabaseUrl } from '@/lib/supabase';
 
 const TASK_NAME = 'background-location-task';
 
 async function saveLocations(points: any[]) {
+  if (!supabase) {
+    addDebugLog('❌ Supabase not configured — skipping write.');
+    return;
+  }
+
   const {
     data: { session },
     error: sessionError,
@@ -175,6 +180,11 @@ export default function IndexRouteScreen() {
           Status: {trackingActive ? "Active" : "Idle"}
         </Text>
         <Text style={styles.subtitle}>Signed in as {session?.user?.email}</Text>
+        <Text style={styles.configText}>SUPABASE_URL: {supabaseUrl}</Text>
+        <Text style={styles.configText}>SUPABASE_ANON_KEY: {supabaseAnonKey}</Text>
+        {supabaseConfigError ? (
+          <Text style={styles.configError}>{supabaseConfigError}</Text>
+        ) : null}
 
         {!trackingActive ? (
           <Button title="Start Safety Tracking" onPress={startTracking} color="#FF3B30" />
@@ -215,6 +225,8 @@ const styles = StyleSheet.create({
   content: { flex: 0.5, justifyContent: 'center', alignItems: 'center', padding: 20 },
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
+  configText: { fontSize: 10, color: '#888', fontFamily: 'monospace', textAlign: 'center', marginBottom: 4 },
+  configError: { fontSize: 11, color: '#FF3B30', fontFamily: 'monospace', textAlign: 'center', marginBottom: 4 },
   signOut: { marginTop: 20 },
   testInsert: { marginTop: 20 },
   // Debug window styling

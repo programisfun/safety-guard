@@ -13,7 +13,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseConfigError } from '@/lib/supabase';
 
 const PRIMARY = '#3c87f7';
 const ERROR_COLOR = '#FF3B30';
@@ -31,6 +31,11 @@ export default function LoginScreen() {
 
     if (!email.trim() || !password) {
       setError('Enter your email and password.');
+      return;
+    }
+
+    if (!supabase) {
+      setError(supabaseConfigError ?? 'Supabase is not configured.');
       return;
     }
 
