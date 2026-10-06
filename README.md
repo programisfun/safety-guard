@@ -44,3 +44,8 @@ npx supabase migration new <name>
 npx tsc --noEmit
 npx expo lint
 ```
+
+## Viewer
+
+A standalone web app to view the recorded location points on a map:
+https://github.com/programisfun/safety-guard-viewer
