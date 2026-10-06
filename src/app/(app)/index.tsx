@@ -4,45 +4,47 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
 import { useSession } from '@/context/auth';
+import { supabase } from '@/lib/supabase';
 
 const TASK_NAME = 'background-location-task';
-const WEBHOOK_URL =
-  process.env.EXPO_PUBLIC_LOCATION_WEBHOOK_URL ||
-  'https://play.svix.com/in/t3OzvHK1hwouzXzFN82yK7aiImk/';
-const WEBHOOK_TIMEOUT_MS = 10000;
 
+async function saveLocations(points: any[]) {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-async function postToWebhook(points: any[]) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sentAt: new Date().toISOString(),
-        locationTimestamp: new Date().toLocaleTimeString(),
-        locations: points.map((p: any) => ({
-          timestamp: new Date(p.timestamp).toISOString(),
-          latitude: p.coords.latitude,
-          longitude: p.coords.longitude,
-          accuracy: p.coords.accuracy,
-          altitude: p.coords.altitude,
-          speed: p.coords.speed,
-          heading: p.coords.heading,
-        })),
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (response.ok) {
-      addDebugLog(`📡 Webhook delivered ${points.length} point(s) — HTTP ${response.status}.`);
-    } else {
-      addDebugLog(`📡 Webhook rejected — HTTP ${response.status}: ${await response.text()}`);
-    }
-  } catch (err: any) {
-    addDebugLog(`❌ Webhook delivery failed: ${err?.message || err}`);
+  if (sessionError) {
+    addDebugLog(`❌ Could not read auth session: ${sessionError.message}`);
+    return;
   }
+
+  if (!session?.user) {
+    addDebugLog('⚠️ No signed-in user — skipping Supabase write.');
+    return;
+  }
+
+  let saved = 0;
+  for (const p of points) {
+    const { error } = await supabase.from('location_points').insert({
+      user_id: session.user.id,
+      latitude: p.coords.latitude,
+      longitude: p.coords.longitude,
+      accuracy: p.coords.accuracy,
+      altitude: p.coords.altitude,
+      speed: p.coords.speed,
+      heading: p.coords.heading,
+      recorded_at: new Date(p.timestamp).toISOString(),
+    });
+
+    if (error) {
+      addDebugLog(`❌ Supabase insert failed: ${error.message}`);
+    } else {
+      saved += 1;
+    }
+  }
+
+  addDebugLog(`✅ Saved ${saved}/${points.length} location row(s) to Supabase.`);
 }
 
 function addDebugLog(message: string) {
@@ -71,7 +73,7 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
     const { latitude, longitude, accuracy } = latestLocation.coords;
     const location = points;
     if (location) {
-      await postToWebhook(location);
+      await saveLocations(location);
     }
     addDebugLog(`📍 Parsed Coordinates -> Lat: ${latitude}, Lon: ${longitude} (±${accuracy}m)`);
   } else {
@@ -134,6 +136,25 @@ export default function IndexRouteScreen() {
     }
   };
 
+  const insertOneLocation = async () => {
+    addDebugLog("🧪 Immediate test insert pressed.");
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("Permission Denied", "Foreground location permission is required.");
+      return;
+    }
+
+    try {
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+      await saveLocations([position]);
+    } catch (err: any) {
+      addDebugLog(`❌ Immediate insert failed: ${err?.message || err}`);
+    }
+  };
+
   const stopTracking = async () => {
     addDebugLog("🛑 Stop Tracking button pressed.");
     try {
@@ -160,6 +181,10 @@ export default function IndexRouteScreen() {
         ) : (
           <Button title="Stop Tracking" onPress={stopTracking} color="#555" />
         )}
+
+        <View style={styles.testInsert}>
+          <Button title="Insert Current Location" onPress={insertOneLocation} color="#2e9e5b" />
+        </View>
 
         <View style={styles.signOut}>
           <Button title="Sign Out" onPress={signOut} color="#3c87f7" />
@@ -191,6 +216,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
   signOut: { marginTop: 20 },
+  testInsert: { marginTop: 20 },
   // Debug window styling
   debugConsole: { flex: 0.5, backgroundColor: '#1e1e1e', borderTopWidth: 2, borderTopColor: '#333', padding: 10 },
   debugTitle: { color: '#00FF00', fontWeight: 'bold', fontSize: 14, marginBottom: 5, fontFamily: 'monospace' },
