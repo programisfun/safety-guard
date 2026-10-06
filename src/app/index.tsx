@@ -2,32 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TASK_NAME = 'background-location-task';
-const STORAGE_KEY = 'location_log';
 const WEBHOOK_URL =
   process.env.EXPO_PUBLIC_LOCATION_WEBHOOK_URL ||
   'https://play.svix.com/in/t3OzvHK1hwouzXzFN82yK7aiImk/';
 const WEBHOOK_TIMEOUT_MS = 10000;
 
-async function saveLocations(points: any[]) {
-  try {
-    const existingRaw = await AsyncStorage.getItem(STORAGE_KEY);
-    const existing: any[] = existingRaw ? JSON.parse(existingRaw) : [];
-    const entries = points.map((p: any) => ({
-      timestamp: new Date(p.timestamp).toISOString(),
-      latitude: p.coords.latitude,
-      longitude: p.coords.longitude,
-      accuracy: p.coords.accuracy,
-    }));
-    const updated = [...entries, ...existing].slice(0, 200); // keep newest 200
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    console.log(`💾 Saved ${entries.length} location(s) to AsyncStorage.`);
-  } catch (err) {
-    console.log(`❌ Failed to save locations: ${err}`);
-  }
-}
 
 async function postToWebhook(points: any[]) {
   try {
@@ -88,7 +69,6 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
     const { latitude, longitude, accuracy } = latestLocation.coords;
     const location = points;
     if (location) {
-      // await saveLocations(location);
       await postToWebhook(location);
     }
     addDebugLog(`📍 Parsed Coordinates -> Lat: ${latitude}, Lon: ${longitude} (±${accuracy}m)`);
@@ -101,19 +81,6 @@ export default function IndexRouteScreen() {
   const [trackingActive, setTrackingActive] = useState(false);
   const [savedEntries, setSavedEntries] = useState<any[]>([]);
 
-  const loadSavedEntries = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      setSavedEntries(raw ? JSON.parse(raw) : []);
-    } catch (err) {
-      console.log(`❌ Failed to read stored locations: ${err}`);
-    }
-  };
-
-  const clearSavedEntries = async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-    setSavedEntries([]);
-  };
 
   useEffect(() => {
     addDebugLog("🔄 App Mounted.");
@@ -193,10 +160,6 @@ export default function IndexRouteScreen() {
 
       <View style={styles.savedSection}>
         <Text style={styles.savedTitle}>💾 Stored Locations ({savedEntries.length})</Text>
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
-          <Button title="Refresh" onPress={loadSavedEntries} />
-          <Button title="Clear" onPress={clearSavedEntries} color="#555" />
-        </View>
         <ScrollView nestedScrollEnabled={true}>
           {savedEntries.length === 0 ? (
             <Text style={styles.debugTextEmpty}>Nothing saved yet.</Text>
