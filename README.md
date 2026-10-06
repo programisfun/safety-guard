@@ -38,6 +38,36 @@ Create a new migration:
 npx supabase migration new <name>
 ```
 
+## EAS Environment Variables (required for builds)
+
+`.env` is gitignored, so EAS Build never sees it. Every `EXPO_PUBLIC_*` value
+must exist as an EAS environment variable, otherwise it is inlined as
+`undefined` and the app crashes on launch (missing Supabase config).
+
+```bash
+npx eas-cli@latest env:set --name EXPO_PUBLIC_SUPABASE_URL \
+  --value "<url>" --environment development --environment preview \
+  --environment production --visibility sensitive --type string --non-interactive
+
+npx eas-cli@latest env:set --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
+  --value "<anon-key>" --environment development --environment preview \
+  --environment production --visibility sensitive --type string --non-interactive
+```
+
+Rules:
+
+- Use `--visibility sensitive` or `plaintext`. **`secret` values are not
+  inlined into `EXPO_PUBLIC_*`** and the app will crash on startup.
+- Your profile picks the environment automatically: `distribution: store` →
+  `production`, `developmentClient: true` → `development`, otherwise →
+  `preview`. This project's `production` profile uses `distribution: internal`,
+  so it resolves to the `preview` environment — setting all three environments
+  covers every profile.
+- Verify with `npx eas-cli@latest env:list --environment preview`.
+
+If the variables are missing, the app now opens to a "Supabase is not
+configured" error screen instead of crashing.
+
 ## Checks
 
 ```bash
