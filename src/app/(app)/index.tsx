@@ -3,6 +3,8 @@ import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ScrollView } from 
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
+import { useSession } from '@/context/auth';
+
 const TASK_NAME = 'background-location-task';
 const WEBHOOK_URL =
   process.env.EXPO_PUBLIC_LOCATION_WEBHOOK_URL ||
@@ -78,6 +80,7 @@ TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
 });
 
 export default function IndexRouteScreen() {
+  const { session, signOut } = useSession();
   const [trackingActive, setTrackingActive] = useState(false);
   const [savedEntries, setSavedEntries] = useState<any[]>([]);
 
@@ -150,12 +153,17 @@ export default function IndexRouteScreen() {
         <Text style={styles.subtitle}>
           Status: {trackingActive ? "Active" : "Idle"}
         </Text>
+        <Text style={styles.subtitle}>Signed in as {session?.user?.email}</Text>
 
         {!trackingActive ? (
           <Button title="Start Safety Tracking" onPress={startTracking} color="#FF3B30" />
         ) : (
           <Button title="Stop Tracking" onPress={stopTracking} color="#555" />
         )}
+
+        <View style={styles.signOut}>
+          <Button title="Sign Out" onPress={signOut} color="#3c87f7" />
+        </View>
       </View>
 
       <View style={styles.savedSection}>
@@ -182,6 +190,7 @@ const styles = StyleSheet.create({
   content: { flex: 0.5, justifyContent: 'center', alignItems: 'center', padding: 20 },
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 10 },
   subtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
+  signOut: { marginTop: 20 },
   // Debug window styling
   debugConsole: { flex: 0.5, backgroundColor: '#1e1e1e', borderTopWidth: 2, borderTopColor: '#333', padding: 10 },
   debugTitle: { color: '#00FF00', fontWeight: 'bold', fontSize: 14, marginBottom: 5, fontFamily: 'monospace' },
